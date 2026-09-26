@@ -4,13 +4,16 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
 import type { Product } from "@/data/products";
+import { products } from "@/data/products";
 
 type CartLine = { product: Product; qty: number };
+type StoredLine = { id: string; qty: number };
 
 type CartContextValue = {
   lines: CartLine[];
@@ -25,10 +28,40 @@ type CartContextValue = {
 };
 
 const CartContext = createContext<CartContextValue | null>(null);
+const STORAGE_KEY = "harbor-oak-cart";
+
+function hydrate(stored: StoredLine[]): CartLine[] {
+  return stored
+    .map(({ id, qty }) => {
+      const product = products.find((p) => p.id === id);
+      return product && qty > 0 ? { product, qty } : null;
+    })
+    .filter(Boolean) as CartLine[];
+}
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [lines, setLines] = useState<CartLine[]>([]);
   const [open, setOpen] = useState(false);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) setLines(hydrate(JSON.parse(raw) as StoredLine[]));
+    } catch {
+      /* ignore */
+    }
+    setReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!ready) return;
+    const payload: StoredLine[] = lines.map((l) => ({
+      id: l.product.id,
+      qty: l.qty,
+    }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  }, [lines, ready]);
 
   const add = useCallback((product: Product, qty = 1) => {
     setLines((prev) => {
